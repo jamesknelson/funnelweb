@@ -1,0 +1,9 @@
+= Funnelweb
+
+Funnelweb is a ruby web crawler framework for spidering multiple domains, choosing a different
+set of rules for each domain. It is primarily targeted at creating crawlers which find and 
+store information on a known set of domains.
+
+= Contributors
+
+Funnelweb is maintained by [James K Nelson](http://jamesknelson.com), from [Numbat Software](http://www.numbat.com.au). Funnelweb was based on [Anemone](http://anemone.rubyforge.org/) by Chris Kite.
