@@ -1,6 +1,6 @@
 module Funnelweb
   class Node
-    def initialize(crawler, page)
+    def initialize(page)
       @page = page
     end
     

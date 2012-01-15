@@ -15,7 +15,7 @@ module Funnelweb
       field :body,          type: Binary
       field :headers,       type: Hash
 
-      field :code,          type: String
+      field :code,          type: Integer
       field :visited,       type: DateTime, :default -> { Time.now }
       field :referer,       type: String
       field :redirect_to,   type: String
