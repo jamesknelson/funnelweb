@@ -19,5 +19,9 @@ module Funnelweb
       yield self
     end
     
+    def process
+      raise NotImplemented
+    end
+    
   end
 end

@@ -11,7 +11,7 @@ module Funnelweb
       # If the time is less than options.fresh_until, don't crawl unless options[:force] is true
       
       # Find the crawler to use from the routes system
-      crawler = #
+      crawler = Routing.crawler(url) 
       
       # Merge options from crawler
       
