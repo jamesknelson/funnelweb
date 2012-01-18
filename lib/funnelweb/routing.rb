@@ -1,3 +1,5 @@
+require 'active_support/core_ext/class/attribute_accessors'
+
 module Funnelweb
   ##
   # This class is an extended version of Rack::URLMap, based on the Padrino version
@@ -20,11 +22,14 @@ module Funnelweb
   #
   # @api semipublic
   class Routing
+    
+    cattr_accessor :mapping
+    @@mapping = []
+    
     class << self
       
       # Called from configuration files to setup the routing
       def setup(*mapping, &block)
-        @mapping = []
         mapping.each { |m| map(m) }
         class_eval(&block) if block
       end
@@ -54,18 +59,18 @@ module Funnelweb
         raise ArgumentError, "paths need to start with /" unless path.nil? or path[0] == ?/ or path.is_a? Regexp
         raise ArgumentError, "crawler must be a class" if crawler.nil? or !crawler.is_a? Class
 
-        path  = path.chomp('/')
+        path  = path.chomp('/') unless path.nil?
         match = Regexp.new("^#{Regexp.quote(path).gsub('/', '/+')}\/?$", nil, 'n') unless path.nil? || path.is_a?(Regexp)
         host  = Regexp.new("^#{Regexp.quote(host)}$", true, 'n') unless host.nil? || host.is_a?(Regexp)
 
-        @mapping << [host, path, match, crawler]
+        @@mapping << [host, path, match, crawler]
       end
       
       # Comares a given request to the routing map and returns the appropriate crawler class. 
       # @api private
       def crawler(url)
         uri = URI(url) unless url.is_a? URI
-        @mapping.each do |host, path, match, crawler|
+        @@mapping.each do |host, path, match, crawler|
           next unless host.nil? || uri.host =~ host
           next unless path.nil? || uri.path =~ match
 

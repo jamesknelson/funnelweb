@@ -1,5 +1,3 @@
 module Funnelweb
-  class Error < ::StandardError
-    attr_accessor :wrapped_exception
-  end
+  class RedirectionLoopException < ::StandardError; end
 end

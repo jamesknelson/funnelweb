@@ -1,63 +1,58 @@
 require 'net/https'
 require 'funnelweb/page'
+require 'funnelweb/exceptions'
 
 module Funnelweb
   class Visit
     @queue = :crawler
     
-    def self.perform(url, referer, options)
-      # If the URL exists in the page database, check its last crawled time
+    def self.perform(url, options = {})
+      puts "Visiting #{url.to_s}"
       
-      # If the time is less than options.fresh_until, don't crawl unless options[:force] is true
+      depth = options.delete(:depth) || 1
       
       # Find the crawler to use from the routes system
-      crawler = Routing.crawler(url) 
+      crawler = Routing.crawler(url).new
       
-      # Merge options from crawler
+      # If the URL exists in the page database, check its last crawled time
+      page = Page.order(:created).where(:url => url.to_s).first
       
-      # Download the page
-      page = fetch_pages(url, referer, depth)
-      
-      # Create node and pass it to the crawler
-      node = Node.new(page)
-      crawler.process(node)
+      # If the time is before page.fresh_until, don't crawl unless options[:force] is true
+      if page.nil? or page.fresh_until < Time.now or options[:force]
+        
+        # Download the page
+        response = get(url, options)
+        
+        Page.new  :url => location,
+                  :body => response.body.dup,
+                  :code => code,
+                  :headers => response.to_hash,
+                  :referer => referer,
+                  :depth => depth,
+                  :redirect_to => redirect_to,
+                  :response_time => response_time
+
+        # Create node and pass it to the crawler
+        crawler.process(Node.new(page))
+      end
     end
     
     private
     
-    #
-    # Fetch a single Page from the response of an HTTP request to *url*.
-    # Just gets the final destination page.
-    #
-    def self.fetch_page(url, referer = nil, depth = nil)
-      fetch_pages(url, referer, depth).last
-    end
+    def self.get(url, options = {}, redirection_depth = 1)
+      if redirection_depth > options[:redirection_limit]
+        raise RedirectionLoopException,
+          "HTTP Redirection loop detected with #{redirection_depth} redirects for url #{url}."
+      end
 
-    #
-    # Create new Pages from the response of an HTTP request to *url*,
-    # including redirects
-    #
-    def self.fetch_pages(url, referer = nil, depth = nil)
-      begin
-        url = URI(url) unless url.is_a?(URI)
-        pages = []
-        get(url, referer) do |response, code, location, redirect_to, response_time|
-          pages << Page.new(location, :body => response.body.dup,
-                                      :code => code,
-                                      :headers => response.to_hash,
-                                      :referer => referer,
-                                      :depth => depth,
-                                      :redirect_to => redirect_to,
-                                      :response_time => response_time)
-        end
-
-        return pages
-      rescue Exception => e
-        if verbose?
-          puts e.inspect
-          puts e.backtrace
-        end
-        return [Page.new(url, :error => e)]
+      url = URI.parse(uri_str)
+      req = Net::HTTP::Get.new(url.path, { 'User-Agent' => ua })
+      response = Net::HTTP.start(url.host, url.port) { |http| http.request(req) }
+      case response
+      when Net::HTTPSuccess     then response
+      when Net::HTTPRedirection then fetch(response['location'], limit - 1)
+      else
+        response.error!
       end
     end
 
@@ -106,7 +101,7 @@ module Funnelweb
         @cookie_store.merge!(response['Set-Cookie']) if accept_cookies?
         return response, response_time
       rescue Timeout::Error, Net::HTTPBadResponse, EOFError => e
-        puts e.inspect if verbose?
+        puts e.inspect if Funnelweb.config[:verbose]
         refresh_connection(url)
         retries += 1
         retry unless retries > 3

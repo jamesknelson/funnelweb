@@ -26,7 +26,7 @@ Gem::Specification.new do |s|
   
   s.add_dependency("nokogiri", ">= 1.3.0")
   s.add_dependency("robots", ">= 0.7.2")
-  s.add_dependency("active_support", ">= 3.1.1")
+  s.add_dependency("active_support", ">= 3.0.0")
   s.add_dependency("resque", ">= 1.19.0")
-  s.add_dependency("resque-scheduler", ">= 2.0.0")
+  s.add_dependency("resque-scheduler", ">= 1.9.9")
 end
