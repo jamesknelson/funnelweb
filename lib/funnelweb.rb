@@ -6,7 +6,7 @@ require	'active_support/core_ext/string/inflections'
 require 'resque'
 
 require 'funnelweb/version'
-require 'funnelweb/visit'
+require 'funnelweb/exceptions'
 
 module Funnelweb
   
@@ -40,14 +40,32 @@ module Funnelweb
     :fresh_days => 3,
     
     # Provide extra debugging info
-    :verbose => false
+    :verbose => false,
+    
+    # Provide a class to use for the visit model
+    :visit_model => nil,
+    
+    # proxy server hostname 
+    :proxy_host => nil,
+    
+    # proxy server port number
+    :proxy_port => false,
   }
-  
-  
+
+  #
+  # Change gloabl Funnelweb configuration options
+  #
   def self.configure(options)
+    unless Funnelweb.config[:visit_model].nil? || options[:visit_model].nil?
+      raise ArgumentError.new("Option visit_model is read-only once set. It has already been set to #{Funnelweb.config[:visit_model].to_s}.")
+    end
+    
     Funnelweb.config.merge!(options)
   end
   
+  #
+  # Load a crawler, and map it into the router
+  #
   def self.crawler(name)
     require name.to_s.downcase
   end
@@ -59,12 +77,15 @@ module Funnelweb
     puts "Funnelweb #{Funnelweb::VERSION} Loaded"
     
     instance_eval(&block)
+    
+    # We cannot require this file before now as it requires Funnelweb.config[:visit_model]
+    # to have been set to the class which will be used as our visit model
+    require 'funnelweb/visit'
   end
   
-  def self.rake
-    require 'funnelweb/tasks'
-  end
-  
+  #
+  # Enqueue a visit for the "entry" url of the given crawler
+  #
   def self.crawl(name)
     begin
       klass = Kernel.const_get("#{name.to_s.classify}Crawler")
@@ -77,7 +98,7 @@ module Funnelweb
     end
     
     puts "Enqueueing #{klass.config[:entry]}"
-    Resque.enqueue(Visit, klass.config[:entry], :force => true)
+    Resque.enqueue(Visit, klass.config[:entry], 1, :force => true)
   end
   
 end

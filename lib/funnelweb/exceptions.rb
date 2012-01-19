@@ -1,3 +1,3 @@
 module Funnelweb
-  class RedirectionLoopException < ::StandardError; end
+  class ConfigurationError < ::StandardError; end
 end
