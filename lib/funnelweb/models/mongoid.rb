@@ -32,7 +32,7 @@ module Funnelweb
         # Other
         field :fresh_until,   type: DateTime, default: -> { |o| Time.now + o.options[:fresh_days].days }
         field :errors,        type: Hash
-        
+        field :depth,         type: Integer
       end
     
     

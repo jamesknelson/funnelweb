@@ -6,6 +6,7 @@ end
 
 module Funnelweb
   class Visit < Funnelweb.config[:visit_model]
+
     
   end
 end

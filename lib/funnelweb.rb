@@ -98,7 +98,7 @@ module Funnelweb
     end
     
     puts "Enqueueing #{klass.config[:entry]}"
-    Resque.enqueue(Visit, klass.config[:entry], 1, :force => true)
+    Resque.enqueue(Crawler, klass.config[:entry], 1, :force => true)
   end
   
 end
