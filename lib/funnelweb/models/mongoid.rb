@@ -30,14 +30,13 @@ module Funnelweb
         field :response_time, type: Float
 
         # Other
-        field :fresh_until,   type: DateTime, default: -> { |o| Time.now + o.options[:fresh_days].days }
-        field :errors,        type: Hash
+        field :fresh_until,   type: DateTime, default: -> { Time.now + Funnelweb.config[:fresh_days].days }
         field :depth,         type: Integer
       end
     
     
       module ClassMethods
-        def find_most_recent_crawl(url)
+        def find_most_recent(url)
           where(:url => url.to_s).order_by(:created).desc.first
         end
       end

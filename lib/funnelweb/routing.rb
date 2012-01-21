@@ -56,7 +56,7 @@ module Funnelweb
         host = options[:host]
         crawler  = options[:to]
 
-        raise ArgumentError, "paths need to start with /" unless path.nil? or path[0] == ?/ or path.is_a? Regexp
+        raise ArgumentError, "paths need to start with /" unless path.nil? or path.is_a? Regexp or path[0] == ?/
         raise ArgumentError, "crawler must be a class" if crawler.nil? or !crawler.is_a? Class
 
         path  = path.chomp('/') unless path.nil?

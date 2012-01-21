@@ -1,4 +1,5 @@
 require 'active_support/core_ext/class/attribute_accessors'
+require 'nokogiri'
 
 require 'funnelweb/routing'
 require 'funnelweb/web_client'
@@ -9,14 +10,23 @@ module Funnelweb
     #
     # This is called by Resque workers to start the proces of a visit 
     #
-    def self.perform(url, depth, options = {})
-      WebClient.get(url, referer, options) do |crawler|  
-        
-        if depth > crawler.class.config[:depth_limit]
-          # Raise an exception, as this is probably an error with the crawler, not the site
-          raise StandardError.new("Depth is #{depth}, which is higher than allowed depth #{options[:depth_limit]}")
-        end     
-        
+    def self.perform(url, options = {})
+      puts "\nUnqueuing #{url}"
+      
+      referer = options[:referer]
+      depth = options[:depth] || 1
+
+      crawler_class = Routing.crawler(url)      
+      options = Funnelweb.config.merge(crawler_class.config.merge(options))
+
+      if depth > options[:depth_limit]
+        # Raise an exception, as this is probably an error with the crawler, not the site
+        raise StandardError.new("Depth is #{depth}, which is higher than allowed depth #{options[:depth_limit]}")
+      end
+    
+      visits = WebClient.get(url, depth, referer, options)
+      unless visits.empty?
+        crawler = crawler_class.new(visits.last, depth)
         crawler.process
       end
     end
@@ -38,17 +48,64 @@ module Funnelweb
 
 
     
-    def initialize(visit)
+    def initialize(visit, depth)
       @visit = visit
+      @depth = depth
     end
     
-    def match(&block)
+    #
+    # Each time a page is processed, only the first match statement which matches the
+    # given conditions is execute
+    #
+    def match(conditions, &block)
+      if !@matched
       
-    end
-    def filter(&block)
+        host = conditions[:host]
+        path = conditions[:path]
+        query = conditions[:query]
+        selectors = Array(conditions[:selectors])
       
+        unless path.is_a? Regexp or path.nil?
+          raise ArgumentError, "path must start with /, or be a Regex" unless path[0] == ?/
+          path = path.chomp('/') unless path.nil?
+          path = Regexp.new("^#{Regexp.quote(path).gsub('/', '/+')}\/?$", nil, 'n')
+        end
+      
+        unless query.is_a? Regexp or query.nil?
+          raise ArgumentError, "query must start with ?, or be a Regex" unless query[0] == ??
+          query = Regexp.new("^\?#{Regexp.quote(query)}$", nil, 'n')
+        end
+        
+        unless host.is_a? Regexp or host.nil?
+          host = Regexp.new("^#{Regexp.quote(host)}$", true, 'n')
+        end
+        
+        return unless (host.nil? or url.host =~ host) and
+                      (path.nil? or url.path =~ path) and
+                      (query.nil? or url.query =~ query) and
+                      selectors.all? { |s| !doc.search(s).empty? }
+        
+        instance_eval(&block)
+        @matched = true
+      end
     end
-    def follow(&block)
+    
+    #
+    # Adds all links which match *selector* to the crawl queue immediately
+    #
+    def crawl(selectors)
+      selectors = Array(selectors)
+      selectors.each do |s|
+        doc.search(s).each do |a|
+          href = a['href']
+          next if href.nil? or href.empty?
+          abs = to_absolute(URI(href)) # rescue next
+          Resque.enqueue(Crawler, abs.to_s, :referer => url.to_s, :depth => depth+1)
+        end
+      end
+    end
+    
+    def follow(selector, &block)
       
     end
     
@@ -61,13 +118,6 @@ module Funnelweb
     end
     
     #
-    # Adds all links which match *selector* to the crawl queue immediately
-    #
-    def crawl(selector)
-      
-    end
-    
-    #
     # URI object for the URL for the page
     #
     def url
@@ -75,10 +125,24 @@ module Funnelweb
     end
     
     #
+    # Depth of the current crawler
+    #
+    def depth
+      @depth
+    end
+    
+    #
+    # The visit object for the current crawler
+    #
+    def visit
+      @visit
+    end
+    
+    #
     # Nokogiri document for the HTML body
     #
     def doc
-      @doc ||= Nokogiri::HTML(visit.body) if visit.body && visit.html? rescue nil
+      @doc ||= Nokogiri::HTML(visit.body) if visit.body and visit.html? # rescue nil
     end
     
     #
@@ -86,10 +150,6 @@ module Funnelweb
     #
     def discard_doc!
       @doc = nil
-    end
-    
-    def visit
-      @visit
     end
     
     #

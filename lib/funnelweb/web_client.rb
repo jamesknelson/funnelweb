@@ -8,8 +8,6 @@ require 'funnelweb/routing'
 
 module Funnelweb
   class WebClient
-    attr_accessor :visit
-    
     @@connections = {}
     @@robots = Robots.new(Funnelweb.config[:user_agent])
     
@@ -17,28 +15,37 @@ module Funnelweb
     # Visit the given url, following referers and yielding a new crawler object with
     # it's associated visit for each request/response
     #
-    def self.get(address, referer, options={})
+    def self.get(address, depth, referer, options={})
       # TODO: It would probably make more sense to get the crawler in crawler.rb, but I'm doing 
       #       it here because we need options from the crawler, and the crawler could change
       #       due to a redirect
       crawler_class = Routing.crawler(address)
       options = Funnelweb.config.merge(crawler_class.config.merge(options))
       
-      url = URI(link)
-      errors = []
+      url = URI(address)
       
       headers = {}
       headers['User-Agent'] = options[:user_agent]
       headers['Referer'] = options[:referer] unless options[:referer].nil?
       #headers['Cookie'] = @cookie_store.to_s unless @cookie_store.empty? || (!accept_cookies? && @opts[:cookies].nil?)
       
+      visits = []
+      
       link = url.clone
       redirections = 0
       begin
-        if !visit?(link)
-          puts "Skipping #{url}:\n" + @errors.join("\n")
-          # TODO: create visit record with reasons for skipping
-          return false
+        recent_page = Visit.find_most_recent(address)
+        
+        errors = []
+        errors << "Page is still fresh, will not check again until #{recent_page.fresh_until.to_s}" unless recent_page.nil? or recent_page.fresh_until < Time.now or options[:force]
+        errors << "Page is disallowed by robots.txt" unless robots_allowed?(link)
+        errors << "#{redirections} redirections were made with a limit of #{options[:redirect_limit]}" if !options[:redirect_limit].nil? and redirections > options[:redirect_limit]
+        errors << "Skipping pages with query strings" if options[:skip_query_strings] and !!link.query
+        errors << "Not following link to different host" unless link.host.nil? || (url.host == link.host)
+        
+        if !errors.empty?
+          puts "Skipping #{url}:\n" + errors.join("\n")
+          return visits
         end
         
         puts "#{redirections == 0 ? 'Visiting' : 'Redirecting to'} #{link.to_s}"
@@ -55,9 +62,9 @@ module Funnelweb
           req = Net::HTTP::Get.new(full_path, headers)
           # HTTP Basic authentication
           req.basic_auth link.user, link.password if link.user
-          self.response = connection(link).request(req)
+          response = connection(link).request(req)
           finish = Time.now()
-          self.response_time = ((finish - start) * 1000).round
+          response_time = ((finish - start) * 1000).round
           #@cookie_store.merge!(response['Set-Cookie']) if accept_cookies?
         rescue Timeout::Error, Net::HTTPBadResponse, EOFError => e
           puts e.inspect if Funnelweb.config[:verbose]
@@ -75,6 +82,7 @@ module Funnelweb
         code = Integer(response.code)
         if response.is_a?(Net::HTTPRedirection)
           redirections += 1
+          redirected_from = link
           redirect_to = link = URI(response['location']).normalize
         else
           redirect_to = nil
@@ -82,28 +90,28 @@ module Funnelweb
         
         # TODO: create visit and crawler containing visit
         
-        yield crawler
+        visits << Visit.new(
+            redirected_from: redirected_from,
+        
+            url:            link.to_s,
+            referer:        referer,
+            method:         'get',
+            data:           nil,
+            code:           code,
+            body:           response.body.dup,
+            headers:        response.to_hash,
+            response_time:  response_time,
+            depth:          depth,
+            
+            fresh_days:     options[:fresh_days]
+        )
+        
         
       end while !redirect_to.nil?
 
-      true
+      visits
     end
-    
-    # TODO: integrate this better.
-    def self.errors(link, options)
-      errors = []
-      
-      recent_page = Page.find_most_recent_crawl(address)
-      
-      errors << "Page is still fresh, will not check again until #{recent_page.fresh_until.to_s}" unless recent_page.nil? or recent_page.fresh_until < Time.now or options[:force]
-      errors << "Page is disallowed by robots.txt" unless crawler.class.robots_allowed?(link)
-      errors << "#{redirections} redirections were made with a limit of #{options[:redirect_limit]}" if !options[:redirect_limit].nil? and redirections > options[:redirect_limit]
-      errors << "Skipping pages with query strings" unless options[:skip_query_strings].nil? || !link.query
-      errors << "Not following link to different host" unless link.host.nil? || (url.host == link.host)
-      
-      errors
-    end
-    
+        
     private
     
     def self.connection(url)
@@ -133,7 +141,7 @@ module Funnelweb
     # Private helper method to check robots.txt
     #
     def self.robots_allowed?(url, options={})
-      option[:obey_robots_txt] ? @@robots.allowed?(url) : true
+      options[:obey_robots_txt] ? @@robots.allowed?(url) : true
     end
     
   end # Visit
