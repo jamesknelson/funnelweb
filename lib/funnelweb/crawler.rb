@@ -1,23 +1,53 @@
 require 'active_support/core_ext/class/attribute_accessors'
 require 'nokogiri'
+require 'resque'
 
 require 'funnelweb/routing'
 require 'funnelweb/web_client'
 
+
 module Funnelweb
+  
+  #
+  # Enqueue a visit for the "entry" url of the given crawler
+  #
+  def self.crawl(name, options = {})
+    klass = options[:class] ||
+      begin
+        class_name = "#{name.to_s.classify}Crawler"
+        Kernel.const_get(class_name)
+      rescue
+        raise ArgumentError.new("The class #{class_name} does not exist or was not loaded.")
+      end
+    
+    if klass.config[:entry].nil?
+      raise ArgumentError.new("The crawler you specified does not have an entry point specified.") 
+    end
+    
+    Crawler.enqueue(klass.config[:entry], :force => true)
+  end
+  
   class Crawler
     @queue = :crawler
+    
     #
     # This is called by Resque workers to start the proces of a visit 
     #
+    def self.enqueue(url, options)
+      Funnelweb.logger.debug "Enqueueing #{url.to_s}"
+      Resque.enqueue(Crawler, url.to_s)
+    end
+    
     def self.perform(url, options = {})
-      puts "\nUnqueuing #{url}"
+      Funnelweb.logger.info "\n- Unqueuing #{url}".light_cyan
       
       referer = options[:referer]
       depth = options[:depth] || 1
 
       crawler_class = Routing.crawler(url)      
       options = Funnelweb.config.merge(crawler_class.config.merge(options))
+            
+      Funnelweb.logger.info "  Processing with #{crawler_class.to_s} @ depth #{depth}".cyan
 
       if depth > options[:depth_limit]
         # Raise an exception, as this is probably an error with the crawler, not the site
@@ -100,7 +130,7 @@ module Funnelweb
           href = a['href']
           next if href.nil? or href.empty?
           abs = to_absolute(URI(href)) # rescue next
-          Resque.enqueue(Crawler, abs.to_s, :referer => url.to_s, :depth => depth+1)
+          self.class.enqueue(abs, :referer => url.to_s, :depth => depth+1)
         end
       end
     end

@@ -24,9 +24,11 @@ Gem::Specification.new do |s|
   s.rdoc_options << '-m' << 'README.rdoc' << '-t' << 'Anemone'
   s.extra_rdoc_files = ["README.rdoc"]
   
+  s.add_dependency("rake", ">= 0.9.2.2")
   s.add_dependency("nokogiri", ">= 1.3.0")
   s.add_dependency("robots", ">= 0.7.2")
   s.add_dependency("active_support", ">= 3.0.0")
   s.add_dependency("resque", ">= 1.19.0")
   s.add_dependency("resque-scheduler", ">= 1.9.9")
+  s.add_dependency("colorize", ">= 0.5.8")
 end

@@ -10,7 +10,7 @@ namespace :funnelweb do
   end
   
   desc "Add a specific crawl's entry point to the crawl queue"
-  task :crawl, :crawler, :needs => :environment do |t, args|
+  task :crawl, [:crawler] => [:environment] do |t, args|
     crawler = args[:crawler]
     
     if crawler.nil?

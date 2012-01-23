@@ -56,12 +56,17 @@ module Funnelweb
         host = options[:host]
         crawler  = options[:to]
 
-        raise ArgumentError, "paths need to start with /" unless path.nil? or path.is_a? Regexp or path[0] == ?/
         raise ArgumentError, "crawler must be a class" if crawler.nil? or !crawler.is_a? Class
 
-        path  = path.chomp('/') unless path.nil?
-        match = Regexp.new("^#{Regexp.quote(path).gsub('/', '/+')}\/?$", nil, 'n') unless path.nil? || path.is_a?(Regexp)
-        host  = Regexp.new("^#{Regexp.quote(host)}$", true, 'n') unless host.nil? || host.is_a?(Regexp)
+        unless path.is_a? Regexp or path.nil?
+          raise ArgumentError, "path must start with /, or be a Regex" unless path[0] == ?/
+          path = path.chomp('/') unless path.nil?
+          match = Regexp.new("^#{Regexp.quote(path).gsub('/', '/+')}\/?$", nil, 'n')
+        end
+      
+        unless host.is_a? Regexp or host.nil?
+          host = Regexp.new("^#{Regexp.quote(host)}$", true, 'n')
+        end
 
         @@mapping << [host, path, match, crawler]
       end

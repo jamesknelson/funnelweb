@@ -1,4 +1,4 @@
-require 'URI'
+require 'uri'
 require 'net/https'
 require 'robots'
 
@@ -44,11 +44,11 @@ module Funnelweb
         errors << "Not following link to different host" unless link.host.nil? || (url.host == link.host)
         
         if !errors.empty?
-          puts "Skipping #{url}:\n" + errors.join("\n")
+          Funnelweb.logger.debug "Skipping #{url}:\n" + errors.join("\n")
           return visits
         end
         
-        puts "#{redirections == 0 ? 'Visiting' : 'Redirecting to'} #{link.to_s}"
+        Funnelweb.logger.debug "#{redirections == 0 ? 'Visiting' : 'Redirecting to'} #{link.to_s}"
       
         # if redirected to a relative url, merge it with the host of the original
         # request url
@@ -67,7 +67,7 @@ module Funnelweb
           response_time = ((finish - start) * 1000).round
           #@cookie_store.merge!(response['Set-Cookie']) if accept_cookies?
         rescue Timeout::Error, Net::HTTPBadResponse, EOFError => e
-          puts e.inspect if Funnelweb.config[:verbose]
+          Funnelweb.logger.error e.inspect if Funnelweb.config[:verbose]
           refresh_connection(link)
           retries += 1
           if retries > 3
